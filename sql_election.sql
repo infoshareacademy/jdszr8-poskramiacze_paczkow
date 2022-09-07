@@ -136,6 +136,7 @@ avg(SBO515207) over (partition by state_abbreviation) "Native Hawaiian- and Othe
 avg(SBO415207) over (partition by state_abbreviation) "Hispanic-owned firms",
 avg(SBO015207) over (partition by state_abbreviation) "Women-owned firms"
 from county_facts
+order by SA
 )
 
 --removing additional gaps - missing both parities voting data
@@ -188,10 +189,52 @@ order by "Hispanic-owned firms" desc
 
 
 --backup queries
-select * from primary_results
+with county_facts1 as (
+
+SELECT
+LEFT(f.area_name, strpos(f.area_name,' ' ) - 1) as county,
+	*
+from county_facts f)
 
 
+select distinct
+f.state_abbreviation,
+f.county,
+f.PST045214,
+sum(f.PST045214) over(partition by f.state_abbreviation),
+f.PST045214/sum(f.PST045214) over(partition by f.state_abbreviation) as ratio,
+r.state_abbreviation,
+r.county
+from county_facts1 f
+join primary_results r
+on f.county = r.county and f.state_abbreviation = r.state_abbreviation
 
+--county weights
+create view v_weights as(
+select distinct
+f.state_abbreviation,
+f.area_name,
+	--LEFT(f.area_name, strpos(f.area_name,' ' ) - 1) as county,
+f.PST045214 county_population,
+sum(f.PST045214) over(partition by f.state_abbreviation) state_population,
+f.PST045214/sum(f.PST045214) over(partition by f.state_abbreviation) as ratio
+from county_facts f)
+
+with weighted_percent as (
+SELECT distinct
+f.state_abbreviation,
+f.area_name,
+f.AGE135214 "Persons under 5 years",
+f.PST045214/sum(f.PST045214) over(partition by f.state_abbreviation) as county_ratio,
+f.AGE135214*(f.PST045214/sum(f.PST045214) over(partition by f.state_abbreviation)) as weighted_percent
+from county_facts f
+order by f.state_abbreviation)
+
+select distinct
+wp.state_abbreviation,
+sum(wp.weighted_percent) over(partition by wp.state_abbreviation) sum_weighted_percent
+from weighted_percent wp
+order by wp.state_abbreviation
 
 select
 v.state_abbreviation,
